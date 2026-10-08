@@ -23,10 +23,10 @@ DATE_RANGE  = '20200201.0000_20210301.0000'
 # Four global UM models with PyFLEXTRKR tracking data at HEALPix zoom=9.
 MODELS = {
     ## zoom 9 models 
-    'um_glm_n2560_RAL3p3_tuned_hk26': {'zoom': 9,  'catalog_key': 'um_glm_n2560_RAL3p3_tuned_hk26', 'display': 'UM N2560 RAL3.3'},
-    'um_glm_n2560_CoMA9_hk26':         {'zoom': 9, 'catalog_key': 'um_glm_n2560_CoMA9_hk26', 'display': 'UM N2560 CoMA9'},
-    'um_glm_n1280_GAL9_v2_hk26':       {'zoom': 9,'catalog_key': 'um_glm_n1280_GAL9_v2_hk26', 'display': 'UM N1280 GAL9'},
-    'um_glm_n1280_CoMA9_hk26':         {'zoom': 9,'catalog_key': 'um_glm_n1280_CoMA9_hk26', 'display': 'UM N1280 CoMA9'},
+    'um_glm_n2560_RAL3p3_tuned_hk26': {'zoom': 6,  'catalog_key': 'um_glm_n2560_RAL3p3_tuned_hk26', 'display': 'UM N2560 RAL3.3'},
+    'um_glm_n2560_CoMA9_hk26':         {'zoom': 6, 'catalog_key': 'um_glm_n2560_CoMA9_hk26', 'display': 'UM N2560 CoMA9'},
+    'um_glm_n1280_GAL9_v2_hk26':       {'zoom': 6,'catalog_key': 'um_glm_n1280_GAL9_v2_hk26', 'display': 'UM N1280 GAL9'},
+    'um_glm_n1280_CoMA9_hk26':         {'zoom': 6,'catalog_key': 'um_glm_n1280_CoMA9_hk26', 'display': 'UM N1280 CoMA9'},
     ## zoom 10 models 
     'um_glm_n2560_RAL3p3_tuned_sahel_z10_t40k': {'zoom': 10, 'catalog_key': 'um_glm_n2560_RAL3p3_tuned_hk26', 
                                     'display':'UM N2560 RAL3.3 SAHEL Z10 40000km2',
@@ -59,26 +59,6 @@ models_name_dict = {
         
 }
 
-# RAL_COLOR = '#0D0C6E'
-# GAL_COLOR = '#AC2078'
-# COMORPH_10_COLOR = "#C40202FF"
-# COMORPH_5_COLOR = '#D17A2F'
-
-# models_name_dict = {
-#     'RAL3' : {'path_id': 'z9/um_glm_n2560_RAL3p3_tuned_hk26', 'color': RAL_COLOR },
-#     'GAL9' : {'path_id': 'z9/um_glm_n1280_GAL9_v2_hk26', 'color': GAL_COLOR},
-#     'CoMA9_5km '     : {'path_id': 'z9/um_glm_n2560_CoMA9_hk26', 'color': COMORPH_5_COLOR }, 
-#     'CoMA9_10km' : {'path_id': 'z9/um_glm_n1280_CoMA9_hk26', 'color': COMORPH_10_COLOR},
-        
-# }
-
-
-
-
-
-
-
-
 
 # Analysis regions.  lon_min/lon_max are in [0, 360]; if lon_min > lon_max the
 # region wraps across 0°.  buf_* bounds are in [-180, 180] and include a buffer
@@ -98,7 +78,23 @@ REGIONS = {
         'lat_min':     3,   'lat_max': 15,
         'buf_lon_min': -20, 'buf_lon_max': 25,
         'buf_lat_min': 3,  'buf_lat_max': 15,
-        }
+        },
+    'tropics_wide': {
+        'display': 'TROPICS', 
+        'lon_min': 320, 'lon_max': 100, 
+        'lat_min': 0, 'lat_max': 45, 
+        'buf_lon_min': -25, 'buf_lon_max': 105,
+        'buf_lat_min': -3,  'buf_lat_max': 25,
+        },
+    'india': { 
+        'display': 'INDIA', 
+        'lon_min': 60, 'lon_max': 105, 
+        'lat_min': -10, 'lat_max': 35, 
+        'buf_lon_min': 55, 'buf_lon_max': 110,
+        'buf_lat_min': -15,  'buf_lat_max': 40,
+} 
+    
+
 }
 
 

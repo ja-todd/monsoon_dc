@@ -8,6 +8,7 @@ from pathlib import Path
 import pickle
 import src.hp_models as models
 import warnings
+import healpy
 
 warnings.filterwarnings('ignore', message='.*The return type of `Dataset.dims`.*', category=FutureWarning)
 
@@ -28,7 +29,6 @@ def hp_mods(ds):
         return ds.rename({'healpix_index': 'cell'}).pipe(egh.attach_coords)
     else: 
         return ds.pipe(egh.attach_coords)
-
 
 def plot_all_fields(ds_plot):
     
@@ -91,6 +91,14 @@ def haversine(lat1, lon1, lat2, lon2):
 
     return R * c
 
+def get_nn_lon_lat_index(nside, lons, lats):
+    lons2, lats2 = np.meshgrid(lons, lats)
+    return xr.DataArray(
+        healpy.ang2pix(nside, lons2, lats2, nest=True, lonlat=True),
+        coords=[("lat", lats), ("lon", lons)],
+    )
+
+
 def _region_mask(ds, region_cfg):
     """Boolean cell mask for the analysis region (handles lon wrap-around)."""
     lon_min, lon_max = region_cfg['lon_min'], region_cfg['lon_max']
@@ -102,8 +110,8 @@ def _region_mask(ds, region_cfg):
     return lon_mask & (ds.lat > lat_min) & (ds.lat < lat_max)
 
 
-def open_region_dataset(model, region_cfg):
-    zoom = models.MODELS[model]['zoom']
+def open_region_dataset(model, region_cfg, zoom=6):
+    # zoom = models.MODELS[model]['zoom']
     catalog_model_key = models.MODELS[model].get('catalog_key', model)
     cat  = _get_intake().open_catalog(models.CATALOG_URL)['UK']
     ds3h = cat[catalog_model_key](zoom=zoom, time='PT3H').to_dask().pipe(hp_mods)
@@ -118,12 +126,70 @@ def open_region_1h_dataset(model, region_cfg):
     return ds1h.isel(cell=_region_mask(ds1h, region_cfg))
 
 
+
+def open_region_latlon(model, lons, lats):
+    zoom = models.MODELS[model]['zoom']
+    catalog_model_key = models.MODELS[model].get('catalog_key', model)
+    cat = _get_intake().open_catalog(models.CATALOG_URL)['UK']
+    ds = cat[catalog_model_key](zoom=zoom, time='PT3H').to_dask().pipe(hp_mods)
+    ds = ds.drop_vars(['lat', 'lon'])
+    idx = get_nn_lon_lat_index(2**zoom, lons, lats)
+    return ds.isel(cell=idx)  
+
 def open_1h_dataset(model):
     zoom = models.MODELS[model]['zoom']
     catalog_model_key = models.MODELS[model].get('catalog_key', model)
     cat  = _get_intake().open_catalog(models.CATALOG_URL)['UK']
     ds1h = cat[catalog_model_key](zoom=zoom, time='PT1H').to_dask().pipe(hp_mods)
     return ds1h
+
+
+#----------------------------------------------------------------------
+# General filtering (not MCS-specific)
+#----------------------------------------------------------------------
+def filter_season(ds, season='jjas' ): 
+    """
+    Filter an xarray dataset by season 
+    """
+    times = ds.time
+    times_pd = pd.DatetimeIndex(times)
+
+    if season == 'all': 
+        return ds 
+
+    if season == 'jjas':
+        season_mask = (times_pd.month >= 6) & (times_pd.month <= 9)
+
+
+    season_filtered = ds.sel(time=season_mask)
+    
+    return season_filtered
+
+
+""" implement asap """
+def change_zoom(zoom_choice):
+    copy_models_dict = models.MODELS.copy() 
+    for mname in copy_models_dict.keys(): 
+        copy_models_dict[mname]['zoom'] = zoom_choice
+
+
+def coarsen_healpix(cells, zoom, target_deg, *arrays): 
+
+    nside = 2**zoom 
+    res_deg = np.degrees(np.sqrt(np.pi / 3)) / nside 
+    dz = int(np.clip(round(np.log2(target_deg / res_deg)), 0, zoom))
+
+    coarse  = np.asarray(cells) >> (2 * dz)
+    _, inv  = np.unique(coarse, return_inverse=True)
+
+    out = []
+    for x in arrays: 
+        x = np.asarray(x, dtype=float)
+        ok = np.isfinite(x)
+        s  = np.bincount(inv, weights=np.where(ok, x, 0), minlength=inv.max() + 1)
+        n = np.bincount(inv, weights=ok.astype(float), minlength=inv.max()+1)
+        out.append(np.where(n > 0, s / np.maximum(n, 1), np.nan))
+    return out
 
 
 #----------------------------------------------------------------------
@@ -238,7 +304,7 @@ LAND_FRAC_THRESHOLD  = 0.8   # mean pf_landfrac above this → land MCS
 OCEAN_FRAC_THRESHOLD = 0.2   # mean pf_landfrac below this → ocean MCS
 
 
-def filter_season(dstracks, season='jja'): 
+def filter_season_tracks(dstracks, season='jja'): 
     """
     Filter tracks by season: 
     If a track starts in the season, it is classed as falling within the seasons
@@ -318,7 +384,7 @@ def filter_tracks(dstracks, season='all', duration='all', surface='all', sahel=F
         sahel_cfg = models.REGIONS['sahel']
         dstracks = filter_region_tracks(dstracks, sahel_cfg)
     if season != 'all':
-        dstracks = filter_season(dstracks, season)
+        dstracks = filter_season_tracks(dstracks, season)
     if duration != 'all':
         dstracks = filter_duration(dstracks, duration)
     if surface != 'all':
