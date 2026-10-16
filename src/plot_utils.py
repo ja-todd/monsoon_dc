@@ -1,18 +1,9 @@
 import matplotlib.pyplot as plt 
 import src.hp_models as models
 import numpy as np
-from scipy.stats import binned_statistic_2d
+from matplotlib.colors import ListedColormap, BoundaryNorm
 from scipy.stats import binned_statistic 
-from scipy.stats import gaussian_kde
-
-UNITS = {
-    'shear': r'm s$^{-1}$', 
-    'tbdiff': r'K', 
-    'cr': r'mm hr$^{-1}$',
-    'pr': r'mm hr$^{-1}$',
-    'condensation_rate': r'kg m$^{-2}$ s$^{-1}$', 
-    'surface_precip': r'kg m$^{-2}$ s$^{-1}$', 
-}
+import cartopy.feature as cfeature
 
 def apply_plot_style(): 
     """
@@ -192,7 +183,6 @@ def centre_legend_right(fig, axs, nrows=1, x_offset=1.02, **legend_kwargs):
 
     return legend
 
-
 def setup_regular_plot(rows=1, cols=3): 
     """
     standard plot used in mcs_statistics.py (1 row x 3 columns, to ensure regular size)
@@ -207,8 +197,6 @@ def setup_regular_plot(rows=1, cols=3):
     label_subplots(axs)
 
     return fig, axs
-
-
 
 def format_jointdist_axis_labelling(subfigs):
     joint_axes_list = [subfig.get_axes()[0] for subfig in subfigs.flatten()]
@@ -238,38 +226,11 @@ def format_jointdist_axis_labelling(subfigs):
 
     return joint_axes_list, marg_x_axes_list, marg_y_axes_list
 
+def invert_axes(axs): 
+    axs.invert_xaxis()
+    axs.invert_yaxis()
 
-def filter_xarray_percentiles(input_data, lower_percentile, upper_percentile):
-    l_quantile = lower_percentile / 100
-    u_quantile = upper_percentile / 100 
-
-    data_l_qtile = input_data.quantile(l_quantile, skipna=True)
-    data_u_qtile = input_data.quantile(u_quantile, skipna=True)
-    filtered = input_data.where((input_data >= data_l_qtile) & (input_data <= data_u_qtile))
-
-    return filtered
-
-def binned_stats(x_axis, y_axis, vals, nx=20, statistic='mean', clip=False,
-                 x_edges=None, y_edges=None):
-    ny = nx
-
-    if x_edges is not None and y_edges is not None:
-        xedges = x_edges
-        yedges = y_edges
-    elif clip:
-        xedges = np.linspace(np.percentile(x_axis, 5), np.percentile(x_axis, 95), nx + 1)
-        yedges = np.linspace(np.percentile(y_axis, 5), np.percentile(y_axis, 95), ny + 1)
-    else:
-        xedges = np.linspace(x_axis.min(), x_axis.max(), nx + 1)
-        yedges = np.linspace(y_axis.min(), y_axis.max(), ny + 1)
-
-    stat, _, _, _ = binned_statistic_2d(
-        x_axis, y_axis, vals,
-        statistic=statistic,
-        bins=[xedges, yedges]
-    )
-
-    return xedges, yedges, stat
+    return None 
 
 def build_jointgrid_axes(subfig, ratio=5, space=0.15,
                           density_labels=False, cbar=False, **kwargs):
@@ -381,7 +342,7 @@ def build_jointgrid_axes(subfig, ratio=5, space=0.15,
     return ax_joint, ax_marg_x, ax_marg_y
 
 def plot_binned_line(x, y, bins, color, ax, label='',  stat='mean', spread='sem', min_count=5):
-    from scipy import stats as scipy_stats
+    import scipy.stats as ss
 
     x = np.asarray(x)
     y = np.asarray(y)
@@ -412,7 +373,7 @@ def plot_binned_line(x, y, bins, color, ax, label='',  stat='mean', spread='sem'
     weights = 1 / np.where(err > 0, err, np.nan)
     valid_w = ~np.isnan(weights)
     if valid_w.sum() >= 2:
-        slope, intercept, r, p, _ = scipy_stats.linregress(
+        slope, intercept, r, p, _ = ss.linregress(
             centers[valid_w], means[valid_w])
         if p < 0.05 and abs(r) > 0:  # significant at 95%
             trend = slope * centers + intercept
@@ -420,48 +381,32 @@ def plot_binned_line(x, y, bins, color, ax, label='',  stat='mean', spread='sem'
 
     return centers, means, err
 
+def add_map_features(ax): 
+    ax.add_feature(cfeature.COASTLINE, linewidth=0.6)
+    ax.add_feature(cfeature.BORDERS, linewidth=0.3)
+    
+    gl = ax.gridlines(draw_labels=True, linewidth=0.3, color="grey", alpha=0.6)
+    gl.top_labels = gl.right_labels = gl.bottom_labels = gl.left_labels =  False
 
+def diurnal_cycle_cmap(): 
 
+    colors = [
+    "#b61df0",  # purple
+    "#0a1fc8",  # dark blue
+    "#4285f0",  # blue
+    "#8fd3e8",  # light blue
+    "#00904a",  # dark green
+    "#33ee00",  # bright green
+    "#e6ee88",  # pale yellow-green
+    "#eebb88",  # tan
+    "#ffd800",  # yellow
+    "#ff7800",  # orange
+    "#d02814",  # red
+    "#ff69b4",  # pink
+    ]
 
-def return_kde_plot_inputs(data, kde_type='standard'): 
-    if kde_type == 'standard': 
-        kde  = gaussian_kde(data)
-        x    = np.linspace(np.percentile(data, 1), np.percentile(data, 99), 200)
+    cmap = ListedColormap(colors)
+    bounds = np.arange(0, 25, 2)
+    norm = BoundaryNorm(bounds, cmap.N)
 
-        return x, kde(x)
-    
-    if kde_type == 'log': 
-        """
-        return 10**x_log, kde(x_log)
-        """
-        log_data = np.log10(data[data > 0])
-        kde = gaussian_kde(log_data)
-        x_log = np.linspace(log_data.min(), log_data.max(), 200)
-        
-        return 10**x_log, kde(x_log)
-    
-    if kde_type == 'circular': 
-        """ 
-        return x_deg, kde(x_deg) * 3
-        
-        """
-        data_rad = np.deg2rad(data)
-                        
-        # wrap data by concatenating shifted copies to handle circularity
-        data_wrapped = np.concatenate([data_rad - 2*np.pi, data_rad, data_rad + 2*np.pi])
-        
-        kde = gaussian_kde(data_wrapped)
-        x_rad = np.linspace(0, 2*np.pi, 200)
-    
-        return np.rad2deg(x_rad), kde(x_rad)*3
-    
-    if kde_type == 'reflected': 
-        """
-        return kde for distribution that is heavily right-skewed
-        """
-        reflected = np.concatenate([data, -data])
-        
-        kde = gaussian_kde(reflected)
-        x = np.linspace(0, np.percentile(data, 99), 200)
-    
-        return x, kde(x) * 2
+    return cmap, norm
