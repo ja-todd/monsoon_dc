@@ -8,7 +8,7 @@ from pathlib import Path
 import pickle
 import src.hp_models as models
 import warnings
-import healpy
+import healpy as hp
 
 warnings.filterwarnings('ignore', message='.*The return type of `Dataset.dims`.*', category=FutureWarning)
 
@@ -118,8 +118,8 @@ def open_region_dataset(model, region_cfg, zoom=6):
     return ds3h.isel(cell=_region_mask(ds3h, region_cfg))
 
 
-def open_region_1h_dataset(model, region_cfg):
-    zoom = models.MODELS[model]['zoom']
+def open_region_1h_dataset(model, region_cfg, zoom=6):
+    # zoom = models.MODELS[model]['zoom']
     catalog_model_key = models.MODELS[model].get('catalog_key', model)
     cat  = _get_intake().open_catalog(models.CATALOG_URL)['UK']
     ds1h = cat[catalog_model_key](zoom=zoom, time='PT1H').to_dask().pipe(hp_mods)
@@ -136,8 +136,8 @@ def open_region_latlon(model, lons, lats):
     idx = get_nn_lon_lat_index(2**zoom, lons, lats)
     return ds.isel(cell=idx)  
 
-def open_1h_dataset(model):
-    zoom = models.MODELS[model]['zoom']
+def open_1h_dataset(model, zoom):
+    # zoom = models.MODELS[model]['zoom']
     catalog_model_key = models.MODELS[model].get('catalog_key', model)
     cat  = _get_intake().open_catalog(models.CATALOG_URL)['UK']
     ds1h = cat[catalog_model_key](zoom=zoom, time='PT1H').to_dask().pipe(hp_mods)
@@ -147,23 +147,21 @@ def open_1h_dataset(model):
 #----------------------------------------------------------------------
 # General filtering (not MCS-specific)
 #----------------------------------------------------------------------
-def filter_season(ds, season='jjas' ): 
+
+def filter_season(ds, months:list): 
     """
-    Filter an xarray dataset by season 
+    filter an xarray dataset with time coord by season
+    
     """
     times = ds.time
     times_pd = pd.DatetimeIndex(times)
 
-    if season == 'all': 
-        return ds 
+    months_mask = times_pd.month.isin(months)
 
-    if season == 'jjas':
-        season_mask = (times_pd.month >= 6) & (times_pd.month <= 9)
+    ds_filtered = ds.sel(time=months_mask)
 
+    return ds_filtered
 
-    season_filtered = ds.sel(time=season_mask)
-    
-    return season_filtered
 
 
 """ implement asap """
