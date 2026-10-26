@@ -5,3 +5,4 @@ figs
 __pycache__/
 *.py[cod]
 slurm
+*.ipynb
