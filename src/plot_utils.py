@@ -1,5 +1,5 @@
 import matplotlib.pyplot as plt 
-import src.hp_models as models
+import src.healpix.hp_models as models
 import numpy as np
 from matplotlib.colors import ListedColormap, BoundaryNorm
 from scipy.stats import binned_statistic 
