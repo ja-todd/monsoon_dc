@@ -13,6 +13,7 @@ Pipeline usage
     zarr = models.data_dir(args.model) / f'entrainment_{args.region}.zarr'
 """
 from pathlib import Path
+import src.regions as regions
 
 # S3_BASE     = 'https://hackathon-o.s3-ext.jc.rl.ac.uk/sim-data/analysis/PyFLEXTRKR'
 # S3_BASE     = 'http://hackathon-o.s3.jc.rl.ac.uk/sim-data/analysis/PyFLEXTRKR'
@@ -21,34 +22,44 @@ CATALOG_URL = 'https://digital-earths-global-hackathon.github.io/catalog/catalog
 DATE_RANGE  = '20200201.0000_20210301.0000'
 
 # Four global UM models with PyFLEXTRKR tracking data at HEALPix zoom=9.
+# MODELS = {
+#     ## zoom 9 models 
+#     'um_glm_n2560_RAL3p3_tuned_hk26': {'zoom': 6,  'catalog_key': 'um_glm_n2560_RAL3p3_tuned_hk26', 'display': 'UM N2560 RAL3.3'},
+#     'um_glm_n2560_CoMA9_hk26':         {'zoom': 6, 'catalog_key': 'um_glm_n2560_CoMA9_hk26', 'display': 'UM N2560 CoMA9'},
+#     'um_glm_n1280_GAL9_v2_hk26':       {'zoom': 6,'catalog_key': 'um_glm_n1280_GAL9_v2_hk26', 'display': 'UM N1280 GAL9'},
+#     'um_glm_n1280_CoMA9_hk26':         {'zoom': 6,'catalog_key': 'um_glm_n1280_CoMA9_hk26', 'display': 'UM N1280 CoMA9'},
+#     ## zoom 10 models 
+#     'um_glm_n2560_RAL3p3_tuned_sahel_z10_t40k': {'zoom': 10, 'catalog_key': 'um_glm_n2560_RAL3p3_tuned_hk26', 
+#                                     'display':'UM N2560 RAL3.3 SAHEL Z10 40000km2',
+
+#                             'mask_path': '/work/scratch-nopw2/mmuetz/hk26/hk26-MCS/tracking/um_glm_n2560_RAL3p3_tuned_sahel_z10/mcstracking/mcs_mask_hphp10_v1_20200201.0000_20210301.0000.zarr',
+
+#                                     'stats_path': ('/work/scratch-nopw2/mmuetz/'
+#                     'hk26/hk26-MCS/tracking/um_glm_n2560_RAL3p3_tuned_sahel_z10/'
+#                         'stats/mcs_tracks_final_20200201.0000_20210301.0000.nc'),
+#                                                 }, 
+
+#     'um_glm_n2560_RAL3p3_tuned_sahel_z10_t4k': {'zoom': 10, 'catalog_key': 'um_glm_n2560_RAL3p3_tuned_hk26', 
+#                                     'display':'UM N2560 RAL3.3 SAHEL Z10 4000km2', 
+#                                     'mask_path': ('/work/scratch-nopw2/mmuetz/hk26/hk26-MCS/tracking/'
+#                                         'um_glm_n2560_RAL3p3_tuned_sahel_z10_area4000/'
+#                                         'mcstracking/mcs_mask_hphp10_v1_20200201.0000_20210301.0000.zarr'),
+#                                     'stats_path': ('/work/scratch-nopw2/mmuetz/hk26/hk26-MCS/tracking/'
+#                                         'um_glm_n2560_RAL3p3_tuned_sahel_z10_area4000/stats/'
+#                                             'mcs_tracks_final_20200201.0000_20210301.0000.nc'),
+#                                                 }, 
+                                                
+
+# }
+
 MODELS = {
     ## zoom 9 models 
     'um_glm_n2560_RAL3p3_tuned_hk26': {'zoom': 6,  'catalog_key': 'um_glm_n2560_RAL3p3_tuned_hk26', 'display': 'UM N2560 RAL3.3'},
     'um_glm_n2560_CoMA9_hk26':         {'zoom': 6, 'catalog_key': 'um_glm_n2560_CoMA9_hk26', 'display': 'UM N2560 CoMA9'},
     'um_glm_n1280_GAL9_v2_hk26':       {'zoom': 6,'catalog_key': 'um_glm_n1280_GAL9_v2_hk26', 'display': 'UM N1280 GAL9'},
     'um_glm_n1280_CoMA9_hk26':         {'zoom': 6,'catalog_key': 'um_glm_n1280_CoMA9_hk26', 'display': 'UM N1280 CoMA9'},
-    ## zoom 10 models 
-    'um_glm_n2560_RAL3p3_tuned_sahel_z10_t40k': {'zoom': 10, 'catalog_key': 'um_glm_n2560_RAL3p3_tuned_hk26', 
-                                    'display':'UM N2560 RAL3.3 SAHEL Z10 40000km2',
-
-                            'mask_path': '/work/scratch-nopw2/mmuetz/hk26/hk26-MCS/tracking/um_glm_n2560_RAL3p3_tuned_sahel_z10/mcstracking/mcs_mask_hphp10_v1_20200201.0000_20210301.0000.zarr',
-
-                                    'stats_path': ('/work/scratch-nopw2/mmuetz/'
-                    'hk26/hk26-MCS/tracking/um_glm_n2560_RAL3p3_tuned_sahel_z10/'
-                        'stats/mcs_tracks_final_20200201.0000_20210301.0000.nc'),
-                                                }, 
-
-    'um_glm_n2560_RAL3p3_tuned_sahel_z10_t4k': {'zoom': 10, 'catalog_key': 'um_glm_n2560_RAL3p3_tuned_hk26', 
-                                    'display':'UM N2560 RAL3.3 SAHEL Z10 4000km2', 
-                                    'mask_path': ('/work/scratch-nopw2/mmuetz/hk26/hk26-MCS/tracking/'
-                                        'um_glm_n2560_RAL3p3_tuned_sahel_z10_area4000/'
-                                        'mcstracking/mcs_mask_hphp10_v1_20200201.0000_20210301.0000.zarr'),
-                                    'stats_path': ('/work/scratch-nopw2/mmuetz/hk26/hk26-MCS/tracking/'
-                                        'um_glm_n2560_RAL3p3_tuned_sahel_z10_area4000/stats/'
-                                            'mcs_tracks_final_20200201.0000_20210301.0000.nc'),
-                                                }
+    'imerg': {'zoom': 6,'catalog_key': 'IR_IMERG', 'display': 'IR IMERG'}
 }
-
 
 
 models_name_dict = {
@@ -60,41 +71,24 @@ models_name_dict = {
 }
 
 
+def get_model_names(): 
+    mnames = [models_name_dict[name]['path_id'].split('/')[1] for name in models_name_dict.keys()]
+
+    mnames = [MODELS[name]['catalog_key'] for name in MODELS.keys()]
+
+    return mnames
+
+
 # Analysis regions.  lon_min/lon_max are in [0, 360]; if lon_min > lon_max the
 # region wraps across 0°.  buf_* bounds are in [-180, 180] and include a buffer
 # used for pre-filtering MCS track centroids.
-REGIONS = {
-    'wam': {
-        'display':     'WAM',
-        'lon_min':     340, 'lon_max': 20,    # wraps: 340–360° + 0–20°
-        'lat_min':     2,   'lat_max': 15,
-        'buf_lon_min': -25, 'buf_lon_max': 25,
-        'buf_lat_min': -3,  'buf_lat_max': 20,
-        },
 
-    'sahel': {
-        'display':     'SAHEL',
-        'lon_min':     340, 'lon_max': 20,    # wraps: 340–360° + 0–20°
-        'lat_min':     3,   'lat_max': 15,
-        'buf_lon_min': -20, 'buf_lon_max': 25,
-        'buf_lat_min': 3,  'buf_lat_max': 15,
-        },
-    'tropics_wide': {
-        'display': 'TROPICS', 
-        'lon_min': 320, 'lon_max': 100, 
-        'lat_min': 0, 'lat_max': 45, 
-        'buf_lon_min': -25, 'buf_lon_max': 105,
-        'buf_lat_min': -3,  'buf_lat_max': 25,
-        },
-    'india': { 
-        'display': 'INDIA', 
-        'lon_min': 60, 'lon_max': 105, 
-        'lat_min': -10, 'lat_max': 35, 
-        'buf_lon_min': 55, 'buf_lon_max': 110,
-        'buf_lat_min': -15,  'buf_lat_max': 40,
-} 
+
+
+WAFRICA_REGIONS = { 
+
+
     
-
 }
 
 
@@ -158,5 +152,5 @@ def add_model_arg(parser):
 
 
 def add_region_arg(parser, default='wam'):
-    parser.add_argument('--region', default=default, choices=list(REGIONS),
+    parser.add_argument('--region', default=default, choices=list(regions.REGIONS),
                         help='Analysis region (default: %(default)s)')

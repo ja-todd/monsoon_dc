@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 import pickle
-import src.hp_models as models
+import src.healpix.hp_models as models
 import warnings
 import healpy as hp
 
@@ -94,7 +94,7 @@ def haversine(lat1, lon1, lat2, lon2):
 def get_nn_lon_lat_index(nside, lons, lats):
     lons2, lats2 = np.meshgrid(lons, lats)
     return xr.DataArray(
-        healpy.ang2pix(nside, lons2, lats2, nest=True, lonlat=True),
+        hp.ang2pix(nside, lons2, lats2, nest=True, lonlat=True),
         coords=[("lat", lats), ("lon", lons)],
     )
 
@@ -117,6 +117,12 @@ def open_region_dataset(model, region_cfg, zoom=6):
     ds3h = cat[catalog_model_key](zoom=zoom, time='PT3H').to_dask().pipe(hp_mods)
     return ds3h.isel(cell=_region_mask(ds3h, region_cfg))
 
+
+def open_region_dataset_notime(model, region_cfg, zoom=6): 
+    catalog_model_key = models.MODELS[model].get('catalog_key', model)
+    cat  = _get_intake().open_catalog(models.CATALOG_URL)['UK']
+    ds3h = cat[catalog_model_key](zoom=zoom).to_dask().pipe(hp_mods)
+    return ds3h.isel(cell=_region_mask(ds3h, region_cfg))
 
 def open_region_1h_dataset(model, region_cfg, zoom=6):
     # zoom = models.MODELS[model]['zoom']
