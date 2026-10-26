@@ -12,6 +12,10 @@ import matplotlib.colors as mcolors
 import pandas as pd
 import src.general_utils as g_utils 
 import matplotlib.tri as mtri
+import healpy as hp
+from scipy.interpolate import make_interp_spline
+from src.atmosphere import Rd, g, pressure_from_height
+from src.general_utils import lon_section, lat_section
 
 
 p_utils.apply_plot_style()
@@ -22,23 +26,27 @@ MODEL_NAMES, REGION_CFG, COLORS = p_utils.plot_var_setup(region='tropics_wide')
 models_dict = models.models_name_dict
 mnames = [models.models_name_dict[name]['path_id'].split('/')[1] for name in MODEL_NAMES]
 
-def tropics_wide_winds_rainfall(region_cfg): 
+def region_seasonal_winds_rainfall(region_cfg, p_levels, months): 
+    month_names = [g_utils.monthDict[m] for m in months]
+    season_string = month_names[0]
+    if len(months) > 1: 
+        season_string = ''.join(month_names)[::3]
+    region = region_cfg['display']
     proj = ccrs.PlateCarree()
     
     pr_cache = {}
     ds3h_cache = {}
     for mname in mnames:
         ds1h = utils.open_region_1h_dataset(mname, region_cfg)
-        ds1h_jjas = utils.filter_season(ds1h, season='jjas')
+        ds1h_jjas = utils.filter_season(ds1h, months)
         pr_cache[mname] = (ds1h_jjas.pr.resample(time='1D').mean() * 86400).mean('time').compute()
 
         ds3h = utils.open_region_dataset(mname, region_cfg)
-        ds3h_cache[mname] = utils.filter_season(ds3h, season='jjas')
+        ds3h_cache[mname] = utils.filter_season(ds3h, months)
 
-    p_levels = [925, 850, 600, 500, 200]
     for p_level in p_levels: 
         fig, axs = plt.subplots(2, 2, figsize=(15, 5), subplot_kw={"projection": proj},\
-                                 constrained_layout=True)
+                                 tight_layout=True)
         ax1, ax2, ax3, ax4 = axs.flatten()
         print("fig set up")
         for print_name, mname, ax in zip(MODEL_NAMES, mnames, axs.flatten()): 
@@ -69,12 +77,21 @@ def tropics_wide_winds_rainfall(region_cfg):
             la, lo = cmean(lat_c), cmean(lon_c)      # fine here since the region doesn't cross the +-180 seam
             ua, va = cmean(uu), cmean(vv)
 
-            ax.set_extent([-39, 99, 0.1, 40], crs=proj)
-            levels = [0, 0.1, 0.2, 0.4, 0.8, 1.6, 3.2, 6.4, 12.8, 20]          # your levels
 
-            cmap = plt.get_cmap("PuBuGn", len(levels))          # one colour per bin, plus one for extend="max"
-            norm = mcolors.BoundaryNorm(levels, cmap.N, extend="max")
-            cf = ax.tricontourf(lon_c, lat_c, pr, levels = levels,
+            
+            
+            lon_min, lon_max, lat_min, lat_max = \
+                    (region_cfg[k] for k in ('lon_min', 'lon_max', 'lat_min', 'lat_max'))
+
+            lon_min = lon_min - 360 if lon_min > lon_max else lon_min
+                
+            
+            ax.set_extent([lon_min + 1, lon_max - 1, lat_min + 0.1, lat_max - 0.1], crs=proj)
+            precip_levels = [0, 0.1, 0.2, 0.4, 0.8, 1.6, 3.2, 6.4, 12.8, 20]          # your levels
+
+            cmap = plt.get_cmap("PuBuGn", len(precip_levels))          # one colour per bin, plus one for extend="max"
+            norm = mcolors.BoundaryNorm(precip_levels, cmap.N, extend="max")
+            cf = ax.tricontourf(lon_c, lat_c, pr, levels = precip_levels,
                                 cmap=cmap, norm=norm, extend="max", transform=proj)
             scale=75
             if p_level == 200: 
@@ -101,7 +118,7 @@ def tropics_wide_winds_rainfall(region_cfg):
         cb = fig.colorbar(cf, cax=cbar_ax)
         cb.set_label("Daily mean precip (mm)"); cb.minorticks_off()
         p_utils.match_colorbar_to_axes(fig, cb, axs, width_fraction=1)
-        plt.savefig(f'figs/JJAS_pr_{p_level}hPa_wind_TROPICS')
+        plt.savefig(f'figs/maps/{season_string}_pr_{p_level}hPa_wind_{region}')
         plt.close()
 
 
@@ -232,7 +249,7 @@ def pseudo_onset_plot(region_cfg, dates_list, p_levels, central_dates, surroundi
         plt.close()
 
 
-def stacked_winds(region_cfg, p_levels): 
+def stacked_winds(region_cfg, p_levels, months): 
     proj = ccrs.PlateCarree()
     ds3h_cache = {}
 
@@ -240,7 +257,7 @@ def stacked_winds(region_cfg, p_levels):
     for mname in mnames:
 
         ds3h = utils.open_region_dataset(mname, region_cfg, zoom=7)
-        ds3h = utils.filter_season(ds3h, season='jjas')
+        ds3h = utils.filter_season(ds3h, months)
         ds3h_cache[mname] = ds3h
 
 
@@ -345,23 +362,22 @@ def stacked_winds(region_cfg, p_levels):
     plt.savefig(f'figs/IM_JJAS_stacked_winds')
     plt.close()
 
-     
-def lat_section(da, lon_min, lon_max, lat_bins):
-        """time mean, longitude-sector mean, binned in latitude -> (pressure, lat_bins)"""
-        da = da.mean('time').compute()
-        lon = da.lon % 360
-        da = da.isel(cell=((lon >= lon_min) & (lon <= lon_max)).values)
-        return da.groupby_bins('lat', lat_bins).mean()
+   
+
 
 def to_p(da, p_new):
-            return da.sortby('pressure').interp(pressure=p_new).values
+        return da.sortby('pressure').interp(pressure=p_new).values
 
 
 
-def vertical_structure(region_cfg, low_lat, high_lat, lon_bounds:list, lat_spacing=1): 
+def vertical_structure_season(region_cfg, low_lat, high_lat, lon_bounds:list, lat_spacing=1, months=[6, 7, 8, 9]): 
     """
     Plot the vertical structure of any region 
     """
+    _, season_string = g_utils.format_plot_names(months)
+
+
+    region_name = region_cfg['display']
     lat_bins = np.arange(low_lat, high_lat, lat_spacing)
     lon_min, lon_max = lon_bounds[0], lon_bounds[1]
     ds3h_cache = {}
@@ -370,7 +386,7 @@ def vertical_structure(region_cfg, low_lat, high_lat, lon_bounds:list, lat_spaci
     for mname in mnames:
 
         ds3h = utils.open_region_dataset(mname, region_cfg, zoom=7)
-        ds3h = utils.filter_season(ds3h, season='jjas')
+        ds3h = utils.filter_season(ds3h, months)
         ds3h_cache[mname] = ds3h
     
     
@@ -384,9 +400,9 @@ def vertical_structure(region_cfg, low_lat, high_lat, lon_bounds:list, lat_spaci
         ds3h = ds3h_cache[mname]
         lat_section_args = lon_min, lon_max, lat_bins
 
-        v   = lat_section(ds3h['va'], lon_min, lon_max, lat_bins)
+        v   = lat_section(ds3h['va'], *lat_section_args)
         # w   = lat_section(ds3h['wap'])      # omega, Pa/s -- check the variable name
-        fld = lat_section(ds3h['ua'], lon_min, lon_max, lat_bins)       # field to contour
+        fld = lat_section(ds3h['ua'], *lat_section_args)       # field to contour
 
         lat_mid = np.array([iv.mid for iv in v.lat_bins.values])
         p_new = np.linspace(float(v.pressure.min()), float(v.pressure.max()), 60)
@@ -401,7 +417,7 @@ def vertical_structure(region_cfg, low_lat, high_lat, lon_bounds:list, lat_spaci
         p_hPa = w.pressure                                  # pressure levels in hPa
         omega_hPa_s = -(p_hPa * g * w) / (Rd * T)           # hPa/s, positive = descent
 
-        # then use it in place of w/100 in the earlier code, interpolated as before
+        
         w_i = to_p(omega_hPa_s, p_new)
         w_plot = w_i
 
@@ -427,38 +443,150 @@ def vertical_structure(region_cfg, low_lat, high_lat, lon_bounds:list, lat_spaci
     for _ax in [ax3, ax4]: 
         _ax.set_xlabel('Latitude [°N]')
     
-    cb = fig.colorbar(cf, ax=axs).set_label('u (m s$^{-1}$)')
-    plt.savefig('figs/IM_vertical_structure')
+    cb = fig.colorbar(cf, ax=axs).set_label('u [m s$^{-1}$]')
+    plt.savefig(f'figs/{region_name}_{season_string}_vertical_structure')
 
 
-def get_multiple_angled_transects(start_lats: list, longitudes: list, angle: int):
-    lon_spacing = np.diff(longitudes)[0]
-    angle_rad = np.deg2rad(angle)
-    lat_increment = np.tan(angle_rad) * lon_spacing
+
+def plot_along_angled_transect(ds, start_latitudes, target_lons, zoom): 
+
+    """
+    try and combine with the above function to make this clean 
+    """
+
+
+    # Generate 5 parallel tracks starting at latitudes 10, 12, 14, 16, and 18
     
-    # Create 2D arrays: shape will be (num_paths, num_longitudes)
-    num_paths = len(start_lats)
-    num_lons = len(longitudes)
+    lons_grid, lats_grid = g_utils.get_multiple_angled_transects(\
+                start_lats=start_latitudes, longitudes=target_lons, angle=20)
+    nside = 2**zoom
+    nest = True
+    pixel_ids_2d = hp.ang2pix(nside, lons_grid, lats_grid, lonlat=True, nest=nest)
+    # Wrap the 2D pixel array into an xarray DataArray with named dimensions
+    target_cells_2d = xr.DataArray(
+        pixel_ids_2d, 
+        dims=['transect_path', 'transect_step']
+    )
+
+    # Xarray handles the 2D indexing seamlessly, creating a multidimensional subset
+    ds_multi_transect = ds.sel(cell=target_cells_2d, method='nearest')
+
+        
+start_latitudes = np.arange(10, 12.1, 0.05) ## range of latitudes across which the parallel transects are constructed
+target_lons = np.arange(60, 80, 0.3)
+
+# plot_along_angled_transect(ds3h, start_latitudes, target_lons)
+
+
+
+def create_smooth_orog(latitudes, orog_p, n_levels=300):
+    """
+    for healpix, latitudes is an array of latitude midpoints usually 
+    orog_p is typically supposed to be on pressure levels (hence the suffix), 
+                     but it doesn't matter if its not.
     
-    lons_2d = np.tile(longitudes, (num_paths, 1))
-    lats_2d = np.zeros((num_paths, num_lons))
+    """ 
+    latitudes = np.asarray(latitudes)
+    orog_p    = np.asarray(orog_p)
+    ok = np.isfinite(orog_p)
+    unique_lat, unique_ind = np.unique(latitudes[ok], return_index=True)
+    unique_height          = np.array(orog_p)[unique_ind]
+    latitude_smooth        = np.linspace(min(unique_lat), max(unique_lat), n_levels)
+    spline                 = make_interp_spline(unique_lat, unique_height, k=3)
+    orog_smooth            = spline(latitude_smooth)  
+
+    return (latitude_smooth, orog_smooth)
+
+def plot_orography_cross_section(region_cfg, months:list, lat_bounds:list, lon_bounds:list, dim='lat', spacing=1): 
+    """
+    Plot the vertical structure (streamfunction, 'horizontal' winds, orography) any region 
+
+    dim: the dimension to preserve i.e. lat by default so you see lat-p plot
+    """
+
+    lat_bins = np.arange(*lat_bounds, spacing)
+    lon_bins = np.arange(*lon_bounds, spacing)
+    lat_section_args = *lon_bounds, lat_bins
+    lon_section_args = *lat_bounds, lon_bins 
+
+    section_args = lat_section_args if dim=='lat'\
+          else lon_section_args
+    cs_func = lat_section if dim=='lat'\
+          else lon_section
+
+    section_args = lat_section_args 
+    cs_func      = lat_section ## abbreviated from 'cross_section_function' 
+    fld_name     = 'ua'   ## eastward wind unless lon-p cross section
+    winds    = ('ua', 'va')
     
-    for i, start_lat in enumerate(start_lats):
-        current_lat = start_lat
-        for j in range(num_lons):
-            lats_2d[i, j] = current_lat
-            current_lat += lat_increment
-            
-    return lons_2d, lats_2d
-     
+    if dim=='lon': 
+        section_args = lon_section_args
+        cs_func      = lon_section
+        fld_name     = 'va'
+        
+
+    ds3h_cache = g_utils.build_dataset_cache(\
+         mnames, region_cfg, months, zoom=7)
+
+    var_names = ['orog', *winds, 'wa', 'ta']
+
+    p_levels = [950, 850, 750, 550, 350, 150]
+    p_level_names = str(p_levels)
+    print("Dataset cache built, looping now")
+    fig, axs = plt.subplots(2, 2, figsize=(13, 10))
+    # ax1, ax2, ax3, ax4 = axs.flatten()
+    for print_name, mname, ax in zip(MODEL_NAMES, mnames, axs.flatten()): 
+        print(f"plotting {print_name} data now")
+        ds3h = ds3h_cache[mname]
+        
+        var_ds = {}
+
+        for var in var_names: 
+
+            var_ds[var] = cs_func(ds3h[var], *section_args)
+
+
+        fld     = var_ds[fld_name]
+        p_new = np.linspace(float(fld.pressure.min()), float(fld.pressure.max()), 60)
+
+        orog, ua, va, wa, T = tuple(var_ds.values())
+        p_hPa = wa.pressure                                  # pressure levels in hPa
+        omega = -(p_hPa * g * wa) / (Rd * T)                 # w in hPa / s
+        w_i = to_p(omega, p_new)
 
 
         
-    
-    
+        orog_p = pressure_from_height(orog)
+
+        if dim=='lat':
+            dim_mid = np.array([iv.mid for iv in orog.lat_bins.values])
+        else: 
+            dim_mid = np.array([iv.mid for iv in orog.lon_bins.values])
+        
+        print(dim_mid)
+
+        print(dim_mid[np.isnan(np.asarray(orog))])               # which bins are NaN
+        print(float((ds3h.lon % 360).min()), float((ds3h.lon % 360).max()))   # dataset's actual lon range
+        
+        f_i    = to_p(fld, p_new)
 
 
+        dim_smooth, orog_smooth = create_smooth_orog(\
+                                            dim_mid, orog_p, n_levels=len(dim_mid))
+        
+        horiz_fld = ax.contourf(dim_mid, p_new, f_i,\
+                              levels=np.arange(-10, 10, 1),
+                        cmap='RdBu_r', extend='both' )
+        ax.plot(dim_smooth, orog_smooth, color='black', linewidth=2)
+        ax.fill_between(dim_smooth, 1000, orog_smooth, color='black')
+        p_utils.invert_axes(ax)
+        ax.set_ylim(1000, 0)
+        ax.set_title(print_name)
+        # fld_print_name = list(var_ds.keys())[1]
 
+    cb = fig.colorbar(horiz_fld, ax=axs).set_label(f'{fld_name[0]}' + r' [m s$^{-1}$]')
+    plt.savefig('figs/orography_cross_section')
+     
 
 
 
@@ -475,5 +603,32 @@ p_levels = [600, 750, 850, 925]
 
 # stacked_winds(IM_region, p_levels)
 # wam_vertical_structure(REGION_CFG, low_lat=4, high_lat=30, lon_bounds=[-20, 20], lat_spacing=1)
-vertical_structure(IM_region, low_lat=-5, high_lat=30, lon_bounds=[60, 105], lat_spacing=1)
+# vertical_structure(IM_region, low_lat=-5, high_lat=30, lon_bounds=[60, 105], lat_spacing=1) 
 
+
+# plot_orography_cross_section(IM_region, lat_bounds=[18, 20], lon_bounds=[72, 82.5], dim='lon', spacing=0.1)
+
+
+# region_seasonal_winds_rainfall(region_cfg=models.REGIONS['tropics_wide'], p_levels=[850, 500, 200], months=[9])
+# region_seasonal_winds_rainfall(region_cfg=models.REGIONS['tropics_wide'], p_levels=[850, 500, 200], months=[6])
+# region_seasonal_winds_rainfall(region_cfg=models.REGIONS['wAfr'], p_levels=[925, 850, 600, 500], months=[6, 7, 8])
+# region_seasonal_winds_rainfall(region_cfg=models.REGIONS['nAfr'], p_levels=[925, 850, 600, 500], months=[5, 6, 7])
+
+wam_cfg = models.REGIONS['wAfr']
+lon_min, lon_max, lat_min, lat_max = \
+            (wam_cfg[k] for k in ('lon_min', 'lon_max', 'lat_min', 'lat_max'))
+
+lon_min = lon_min - 360 if lon_min > lon_max else lon_min 
+
+
+vertical_structure_season(wam_cfg, lat_min, lat_max,\
+                           lon_bounds=[lon_min, lon_max], lat_spacing=1, months=[6, 7, 8])
+
+india_cfg = models.REGIONS['india']
+lon_min, lon_max, lat_min, lat_max = \
+            (india_cfg[k] for k in ('lon_min', 'lon_max', 'lat_min', 'lat_max'))
+
+lon_min = lon_min - 360 if lon_min > lon_max else lon_min 
+
+vertical_structure_season(india_cfg, lat_min, lat_max,\
+                           lon_bounds=[lon_min, lon_max], lat_spacing=1, months=[6, 7, 8])
